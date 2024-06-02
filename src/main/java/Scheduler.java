@@ -57,7 +57,7 @@ public class Scheduler {
          */
         Shipment shipment1 = Shipment.Builder.newInstance("1").addSizeDimension(0,1).setPickupLocation(Location.newInstance(19,8))
                 .setDeliveryLocation(Location.newInstance(11, 28)).build();
-        Shipment shipment2 = Shipment.Builder.newInstance("2").addSizeDimension(0,1).setPickupLocation(Location.newInstance(19,8))
+        Shipment shipment2 = Shipment.Builder.newInstance("2").addSizeDimension(0,1).setPickupLocation(Location.newInstance(19,18))
                 .setDeliveryLocation(Location.newInstance(11, 28)).build();
 
 
