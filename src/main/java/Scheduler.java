@@ -1,5 +1,7 @@
+import com.graphhopper.jsprit.analysis.toolbox.GraphStreamViewer;
 import com.graphhopper.jsprit.core.algorithm.VehicleRoutingAlgorithm;
 import com.graphhopper.jsprit.core.algorithm.box.SchrimpfFactory;
+import com.graphhopper.jsprit.core.analysis.SolutionAnalyser;
 import com.graphhopper.jsprit.core.problem.Location;
 import com.graphhopper.jsprit.core.problem.VehicleRoutingProblem;
 import com.graphhopper.jsprit.core.problem.job.Shipment;
