@@ -29,7 +29,7 @@ def create_data_model():
     ]
     data["num_vehicles"] = 2
     data["vehicle_capacities"] = [2, 2]
-    data["demands"] = [0, 2, 2, 1, 1, -1]
+    data["demands"] = [0, 2, 1, 1, 1, -1] # no of people at each node
     data["depot"] = 0
     data["distance_matrix"], data["pickups_deliveries"], data["demands"] = duplicate_nodes(data["distance_matrix"], data["pickups_deliveries"], data["demands"])
     return data
@@ -174,6 +174,8 @@ def main():
     # Print solution on console.
     if solution:
         print_solution(data, manager, routing, solution)
+    else:
+        print("No solution")
 
 
 if __name__ == "__main__":
