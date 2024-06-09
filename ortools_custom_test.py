@@ -9,19 +9,27 @@ def create_data_model():
     data = {}
     data["distance_matrix"] = [
         # fmt: off
-        [0, 10, 10, 10],
-        [10, 0, 10, 10],
-        [10, 10, 0, 10],
-        [10, 10, 10, 0],
+        # [0, 10, 10, 10],
+        # [10, 0, 10, 10],
+        # [10, 10, 0, 10],
+        # [10, 10, 10, 0],
+        [   0,  110,   10,  150,  50, 1500],
+        [ 110,    0,  100,  200,  300, 1000],
+        [  10,  100,    0,  300,  200, 1005],
+        [ 150,  200,  300,    0,  100, 1200],
+        [  50,  300,  200,  100,    0, 1300],
+        [1500, 1000, 1005, 1200, 1300,    0],
         # fmt: on
     ]
     data["pickups_deliveries"] = [
-        [1, 3],
-        [2, 3],
+        [1, 5],
+        [2, 5],
+        [3, 5],
+        [4, 5],
     ]
     data["num_vehicles"] = 2
     data["vehicle_capacities"] = [2, 2]
-    data["demands"] = [0, 1, 1, -1]
+    data["demands"] = [0, 2, 2, 1, 1, -1]
     data["depot"] = 0
     data["distance_matrix"], data["pickups_deliveries"], data["demands"] = duplicate_nodes(data["distance_matrix"], data["pickups_deliveries"], data["demands"])
     return data
