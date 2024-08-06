@@ -1,5 +1,6 @@
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
+import re
 import numpy as np
 import pandas as pd
 import urllib
@@ -65,7 +66,7 @@ def create_data_model(drivers_df, workers_df, vehicle_capacity):
         # Home
         data['worker_name'].append(row['Name'])
         data['node_type'].append('from_1')
-        home_address = urllib.parse.quote(row['Home'].strip()+', Kuwait')
+        home_address = format_address(row['Home'])
         data['demands'].append(1)
         data['time_windows'].append((0, 86400))
         if home_address not in address_dict:
@@ -76,7 +77,7 @@ def create_data_model(drivers_df, workers_df, vehicle_capacity):
         # Work
         data['worker_name'].append(row['Name'])
         data['node_type'].append('to_1')
-        dest_address = urllib.parse.quote(row['Destination'].strip()+', Kuwait')
+        dest_address = format_address(row['Destination'])
         dest_time = row['Arrival Time']
         dest_time_sec = dest_time.hour * 3600 + dest_time.minute * 60 # + dest_time.second
         data['time_windows'].append((dest_time_sec-300, dest_time_sec))
@@ -155,6 +156,24 @@ def create_data_model(drivers_df, workers_df, vehicle_capacity):
     print(address_rpt)
 
     return data
+
+
+def format_address(address):
+    # Remove surrounding spaces
+    address = address.strip()
+
+    # Check if the address is in the format "double, double" or "double,double"
+    pattern = r"^\d+\.\d+,\s?\d+\.\d+$"
+    
+    if re.match(pattern, address):
+        # Remove the space if it exists
+        address = re.sub(r"\s+", "", address)
+    else:
+        # Add ", Kuwait" to the end
+        address = f"{address}, Kuwait"
+
+    # Percent encode to use in URL
+    return urllib.parse.quote(address)
 
 
 def time_to_seconds(time_str):
@@ -377,8 +396,8 @@ def create_schedule(data, manager, routing, solution):
             row = []
             if data['node_type'][ind] == 'from_1' or data['node_type'][ind] == 'from_2':
                 name = data['worker_name'][ind]
-                home_address = urllib.parse.unquote(data['addresses'][data['address_rpt'][ind]])[:-len(', Kuwait')]
-                dest_address = urllib.parse.unquote(data['addresses'][data['address_rpt'][ind + 1]])[:-len(', Kuwait')]
+                home_address = urllib.parse.unquote(data['addresses'][data['address_rpt'][ind]])#[:-len(', Kuwait')]
+                dest_address = urllib.parse.unquote(data['addresses'][data['address_rpt'][ind + 1]])#[:-len(', Kuwait')]
                 if data['node_type'][ind] == 'from_1':
                     # Pickup time range:
                     # pickup_time = f'{convert_seconds_to_hhmm(solution.Min(time_var))} to {convert_seconds_to_hhmm(solution.Max(time_var))}'
@@ -407,10 +426,10 @@ def main():
     """Entry point of the program."""
 
     # Read the Excel files
-    # drivers_df = pd.read_excel('Test_Drivers.xlsx')
-    drivers_df = pd.read_excel('Drivers.xlsx')
-    # workers_df = pd.read_excel('Test_Workers.xlsx')
-    workers_df = pd.read_excel('Workers (edited).xlsx')
+    drivers_df = pd.read_excel('Test_Drivers.xlsx')
+    # drivers_df = pd.read_excel('Drivers.xlsx')
+    workers_df = pd.read_excel('Test_Workers.xlsx')
+    # workers_df = pd.read_excel('Workers (edited).xlsx')
     vehicle_capacity = 2
     data = create_data_model(drivers_df, workers_df, vehicle_capacity)
     print(data)
