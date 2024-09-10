@@ -6,8 +6,12 @@ import pandas as pd
 import urllib
 import matrix
 import api
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from tabulate import tabulate
 from openpyxl import Workbook
+from openpyxl.styles import PatternFill
+
 
 def create_test_data_model():
     """Stores the data for the problem."""
@@ -44,10 +48,14 @@ def create_test_data_model():
     return data
 
 
-def create_data_model(drivers_df, workers_df, vehicle_capacity):
+def create_data_model(drivers_df, workers_df, vehicle_capacity, timezone=None):
     '''Stores the data for the problem.'''
     data = {}
 
+    start_of_day = time_to_epoch_time('00:00:00', timezone)
+    end_of_day = time_to_epoch_time('23:59:59', timezone)
+    # print(str(start_of_day))
+    # print(str(end_of_day))
     data['addresses'] = []
     address_dict = {} # maps index in data['addresses'] to full name of address
     address_rpt = [] # addresses with home and destinations repeated for the solver
@@ -57,7 +65,7 @@ def create_data_model(drivers_df, workers_df, vehicle_capacity):
     data['driver_names'] = drivers_df['Name'].tolist()
     data['worker_name'] = ['depot']
     data['node_type'] = ['depot']
-    data['time_windows'] = [(0, 86400)]
+    data['time_windows'] = [(start_of_day, end_of_day)]
     data['demands'] = [0]
     data['pickups_deliveries'] = []
     # data['time_matrix'] = []
@@ -68,7 +76,7 @@ def create_data_model(drivers_df, workers_df, vehicle_capacity):
         data['node_type'].append('from_1')
         home_address = format_address(row['Home'])
         data['demands'].append(1)
-        data['time_windows'].append((0, 86400))
+        data['time_windows'].append((start_of_day, end_of_day))
         if home_address not in address_dict:
             data['addresses'].append(home_address)
             address_dict[home_address] = len(data['addresses']) - 1
@@ -79,7 +87,8 @@ def create_data_model(drivers_df, workers_df, vehicle_capacity):
         data['node_type'].append('to_1')
         dest_address = format_address(row['Destination'])
         dest_time = row['Arrival Time']
-        dest_time_sec = dest_time.hour * 3600 + dest_time.minute * 60 # + dest_time.second
+        # dest_time_sec = dest_time.hour * 3600 + dest_time.minute * 60 # + dest_time.second
+        dest_time_sec = time_to_epoch_time(f'{dest_time.hour}:{dest_time.minute}:00', timezone)
         data['time_windows'].append((dest_time_sec-300, dest_time_sec))
         data['demands'].append(-1)
         if dest_address not in address_dict:
@@ -95,7 +104,8 @@ def create_data_model(drivers_df, workers_df, vehicle_capacity):
         data['node_type'].append('from_2')
         data['demands'].append(1)
         leave_time = row['Leave Time']
-        leave_time_sec = leave_time.hour * 3600 + leave_time.minute * 60 # + leave_time.second
+        # leave_time_sec = leave_time.hour * 3600 + leave_time.minute * 60 # + leave_time.second
+        leave_time_sec = time_to_epoch_time(f'{leave_time.hour}:{leave_time.minute}:00', timezone)
         data['time_windows'].append((leave_time_sec, leave_time_sec + 300))
         address_rpt.append(address_dict[dest_address])
 
@@ -103,7 +113,7 @@ def create_data_model(drivers_df, workers_df, vehicle_capacity):
         data['worker_name'].append(row['Name'])
         data['node_type'].append('to_2')
         dest_time = row['Arrival Time']
-        data['time_windows'].append((0, 86400))
+        data['time_windows'].append((start_of_day, end_of_day))
         data['demands'].append(-1)
         address_rpt.append(address_dict[home_address])
 
@@ -152,8 +162,8 @@ def create_data_model(drivers_df, workers_df, vehicle_capacity):
 
     data['time_matrix'] = array
     
-    print(address_dict)
-    print(address_rpt)
+    # print(address_dict)
+    # print(address_rpt)
 
     return data
 
@@ -174,6 +184,60 @@ def format_address(address):
 
     # Percent encode to use in URL
     return urllib.parse.quote(address)
+
+
+def time_to_epoch_time(time_str, timezone=None):
+    """
+        Convert time from hh:mm:ss or hh:mm:ss am/pm to the UNIX timestamp of that time in the next day
+    """
+    time_str = time_str.upper().strip()
+    split_time = time_str.split()
+    time = split_time[0]
+    time_hour, time_min, time_sec = time.split(':')
+    time_hour = int(time_hour)
+    time_min = int(time_min)
+    time_sec = int(time_sec)
+    if len(split_time) > 1:
+        am_pm = split_time[1]
+        if am_pm == 'AM' and time_hour == 12:
+            time_hour = 0
+        elif am_pm == 'PM' and time_hour > 12:
+            time_hour += 12
+
+    # print(time_str, time, time_hour, time_min)
+
+    now = datetime.now() + timedelta(days=1)
+    # print(now)
+
+    if timezone:
+        localized_now = now.astimezone(ZoneInfo(timezone))
+    else:
+        localized_now = now.astimezone()
+    # print(localized_now)
+
+    target_time = localized_now.replace(hour=time_hour, minute=time_min, second=time_sec, microsecond=0)
+    target_timestamp = int(target_time.timestamp())
+    # print(target_time)
+    # print(target_timestamp)
+    return target_timestamp
+
+
+def epoch_time_to_time(timestamp, timezone=None):
+    if timezone:
+        dt = datetime.fromtimestamp(timestamp, ZoneInfo(timezone))
+    else:
+        dt = datetime.fromtimestamp(timestamp)
+    # hour = dt.hour
+    # minute = dt.minute
+    # if hour == 0:
+    #     hour = 12
+    # elif hour > 12:
+    #     hour -= 12
+    # period = 'AM' if hour < 12 else 'PM'
+    # time_str = f"{hour}:{minute} {period}"
+    # return time_str
+    # return dt.strftime('%m/%d/%Y  %I:%M %p')
+    return dt.strftime('%I:%M %p')
 
 
 def time_to_seconds(time_str):
@@ -240,7 +304,7 @@ def print_2d_matrix(matrix):
     print()
 
 
-def print_solution(data, manager, routing, solution):
+def print_solution(data, manager, routing, solution, timezone):
     """Prints solution on console."""
     print('Time:')
     print(f"Objective: {solution.ObjectiveValue()}")
@@ -253,23 +317,24 @@ def print_solution(data, manager, routing, solution):
             time_var = time_dimension.CumulVar(index)
             plan_output += (
                 f"{manager.IndexToNode(index)}"
+                f" Time({epoch_time_to_time(solution.Min(time_var), timezone)},{epoch_time_to_time(solution.Max(time_var), timezone)})"
                 # f" Time({solution.Min(time_var)},{solution.Max(time_var)})"
-                f" Time({convert_seconds_to_hhmmss(solution.Min(time_var))},{convert_seconds_to_hhmmss(solution.Max(time_var))})"
                 " \n-> "
             )
             index = solution.Value(routing.NextVar(index))
         time_var = time_dimension.CumulVar(index)
         plan_output += (
             f"{manager.IndexToNode(index)}"
-            f" Time({convert_seconds_to_hhmmss(solution.Min(time_var))},{convert_seconds_to_hhmmss(solution.Max(time_var))})\n"
+            f" Time({epoch_time_to_time(solution.Min(time_var), timezone)},{epoch_time_to_time(solution.Max(time_var), timezone)})\n"
+            # f" Time({solution.Min(time_var)},{solution.Max(time_var)})\n"
         )
-        plan_output += f"Time of the route: {convert_seconds_to_hhmmss(solution.Min(time_var))}\n"
+        plan_output += f"Time of the route: {epoch_time_to_time(solution.Min(time_var), timezone)}\n"
         print(plan_output)
         total_time += solution.Min(time_var)
-    print(f"Total time of all routes: {convert_seconds_to_hhmmss(total_time)}")
+    print(f"Total time of all routes: {total_time}")
 
 
-def solve(data):
+def solve(data, same_driver=False, output_file='Schedule.xlsx', timezone=None):
     # Create the routing index manager.
     manager = pywrapcp.RoutingIndexManager(
         len(data["time_matrix"]), data["num_vehicles"], data["depot"]
@@ -296,15 +361,15 @@ def solve(data):
     time = "Time"
     routing.AddDimension(
         transit_callback_index,
-        100000,  # allow waiting time
+        18000000,  # allow waiting time
         10000000000,  # maximum time per vehicle
         False,  # Don't force start cumul to zero.
         time,
     )
     time_dimension = routing.GetDimensionOrDie(time)
-    # # set a large coefficient for the global span of the routes (i,e, maximum time of routes)
-    # # to minimize time of longest route
-    # # time_dimension.SetGlobalSpanCostCoefficient(100)
+    # set a large coefficient for the global span of the routes (i,e, maximum time of routes)
+    # to minimize time of longest route
+    time_dimension.SetGlobalSpanCostCoefficient(100)
 
     # Add time window constraints for each location except depot.
     for location_idx, time_window in enumerate(data["time_windows"]):
@@ -312,13 +377,13 @@ def solve(data):
             continue
         index = manager.NodeToIndex(location_idx)
         time_dimension.CumulVar(index).SetRange(time_window[0], time_window[1])
-    # # Add time window constraints for each vehicle start and end node.
-    # depot_idx = data["depot"]
-    # for vehicle_id in range(data["num_vehicles"]):
-    #     index = routing.Start(vehicle_id)
-    #     time_dimension.CumulVar(index).SetRange(
-    #         data["time_windows"][depot_idx][0], data["time_windows"][depot_idx][1]
-    #     )
+    # Add time window constraints for each vehicle start and end node.
+    depot_idx = data["depot"]
+    for vehicle_id in range(data["num_vehicles"]):
+        index = routing.Start(vehicle_id)
+        time_dimension.CumulVar(index).SetRange(
+            data["time_windows"][depot_idx][0], data["time_windows"][depot_idx][1]
+        )
 
     # Instantiate route start and end times to produce feasible times.
     for i in range(data["num_vehicles"]):
@@ -344,16 +409,35 @@ def solve(data):
     )
 
     # Define Transportation Requests.
-    for request in data["pickups_deliveries"]:
-        pickup_index = manager.NodeToIndex(request[0])
-        delivery_index = manager.NodeToIndex(request[1])
-        routing.AddPickupAndDelivery(pickup_index, delivery_index)
+    for index in range(0, len(data["pickups_deliveries"]), 2):
+        request1 = data["pickups_deliveries"][index]
+        pickup_index1 = manager.NodeToIndex(request1[0])
+        delivery_index1 = manager.NodeToIndex(request1[1])
+        routing.AddPickupAndDelivery(pickup_index1, delivery_index1)
         routing.solver().Add(
-            routing.VehicleVar(pickup_index) == routing.VehicleVar(delivery_index)
+            routing.VehicleVar(pickup_index1) == routing.VehicleVar(delivery_index1)
         )
         routing.solver().Add(
-            time_dimension.CumulVar(pickup_index)
-            <= time_dimension.CumulVar(delivery_index)
+            time_dimension.CumulVar(pickup_index1)
+            <= time_dimension.CumulVar(delivery_index1)
+        )
+
+        request2 = data["pickups_deliveries"][index+1]
+        pickup_index2 = manager.NodeToIndex(request2[0])
+        delivery_index2 = manager.NodeToIndex(request2[1])
+        routing.AddPickupAndDelivery(pickup_index2, delivery_index2)
+        routing.solver().Add(
+            routing.VehicleVar(pickup_index2) == routing.VehicleVar(delivery_index2)
+        )
+        routing.solver().Add(
+            time_dimension.CumulVar(pickup_index2)
+            <= time_dimension.CumulVar(delivery_index2)
+        )
+
+        # Make the same driver send a worker to work and back
+        if (same_driver):
+            routing.solver().Add(
+                routing.VehicleVar(pickup_index1) == routing.VehicleVar(pickup_index2)
         )
 
     # Setting first solution heuristic.
@@ -367,26 +451,34 @@ def solve(data):
 
     # Print solution on console.
     if solution:
-        print_solution(data, manager, routing, solution)
-        create_schedule(data, manager, routing, solution)
+        print_solution(data, manager, routing, solution, timezone)
+        create_schedule(data, manager, routing, solution, output_file, timezone)
     else:
         print("\nNo solution\n")
 
     return solution
 
 
-def create_schedule(data, manager, routing, solution):
+def create_schedule(data, manager, routing, solution, output_file, timezone):
     """Store schedule into Excel sheet."""
     wb = Workbook()
     ws = wb.active
     row_count = 1
     time_dimension = routing.GetDimensionOrDie("Time")
+    heading_fill = PatternFill(start_color='8DB4E2', end_color='8DB4E2', fill_type='solid')
+    subheading_fill = PatternFill(start_color='C5D9F1', end_color='C5D9F1', fill_type='solid')
     for vehicle_id in range(data["num_vehicles"]):
         ws.append([data['driver_names'][vehicle_id]])
         print([data['driver_names'][vehicle_id]])
         ws.merge_cells(f'A{row_count}:E{row_count}')
+        ws[f'A{row_count}'].fill = heading_fill
         row_count += 1
         ws.append(['Name', 'From', 'To',  'Pick-up Time', 'Arrival Time'])
+        ws[f'A{row_count}'].fill = subheading_fill
+        ws[f'B{row_count}'].fill = subheading_fill
+        ws[f'C{row_count}'].fill = subheading_fill
+        ws[f'D{row_count}'].fill = subheading_fill
+        ws[f'E{row_count}'].fill = subheading_fill
         row_count += 1
         index = routing.Start(vehicle_id)
         while not routing.IsEnd(index):
@@ -404,10 +496,10 @@ def create_schedule(data, manager, routing, solution):
                     # Midpoint of pickup time range:
                     # pickup_time = convert_seconds_to_hhmm((solution.Min(time_var)+solution.Max(time_var)) // 2)
                     # Max pickup time:
-                    pickup_time = convert_seconds_to_hhmm(solution.Max(time_var))
-                    arrival_time = convert_seconds_to_hhmm(data['time_windows'][ind + 1][1])
+                    pickup_time = epoch_time_to_time(solution.Max(time_var), timezone)
+                    arrival_time = epoch_time_to_time(data['time_windows'][ind + 1][1], timezone)
                 elif data['node_type'][ind] == 'from_2':
-                    pickup_time = convert_seconds_to_hhmm((solution.Min(time_var)+solution.Max(time_var)) // 2)
+                    pickup_time = epoch_time_to_time((solution.Min(time_var)+solution.Max(time_var)) // 2, timezone)
                     arrival_time = '-'
                 row = [ name,
                         home_address, 
@@ -420,7 +512,21 @@ def create_schedule(data, manager, routing, solution):
         ws.append([])
         row_count += 1
 
-    wb.save('Schedule.xlsx')
+    # Adjust column width
+    for column_cells in ws.columns:
+        # Get the maximum length of the content in the column
+        max_length = 0
+        for cell in column_cells:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        # Adjust the column width (adding a little extra space)
+        adjusted_width = (max_length + 1)
+        ws.column_dimensions[column_cells[1].column_letter].width = adjusted_width
+
+    wb.save(output_file)
 
 def main():
     """Entry point of the program."""
@@ -429,12 +535,14 @@ def main():
     drivers_df = pd.read_excel('Test_Drivers.xlsx')
     # drivers_df = pd.read_excel('Drivers.xlsx')
     workers_df = pd.read_excel('Test_Workers.xlsx')
-    # workers_df = pd.read_excel('Workers (edited).xlsx')
-    vehicle_capacity = 2
-    data = create_data_model(drivers_df, workers_df, vehicle_capacity)
+    # workers_df = pd.read_excel('Workers_Test.xlsx')
+    output_file = 'Schedule.xlsx'
+    vehicle_capacity = 3
+    timezone = 'Asia/Kuwait'
+    data = create_data_model(drivers_df, workers_df, vehicle_capacity, timezone)
     print(data)
-    print_2d_matrix(data['time_matrix'])
-    solve(data)
+    # print_2d_matrix(data['time_matrix'])
+    solve(data, same_driver=False, output_file=output_file)
 
 if __name__ == "__main__":
     main()

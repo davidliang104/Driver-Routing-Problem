@@ -78,10 +78,10 @@ def send_request(origin_addresses, dest_addresses, traffic, API_key):
   request = request + '&origins=' + origin_address_str + '&destinations=' + dest_address_str + '&key=' + API_key
   if traffic:
     request = request + '&departure_time=' + departure_time
-  print(request)
+  print('Request:\n'+str(request)+'\n')
   jsonResult = urllib.request.urlopen(request).read()
   response = json.loads(jsonResult)
-  # print(response)
+  print('Response:\n'+str(response)+'\n')
   return response
 
 
