@@ -6,7 +6,7 @@ import urllib
 import urllib.request
 
 
-def create_time_matrix(data, traffic = False):
+def create_time_matrix(data, traffic = False, departure_time = 'now'):
   addresses = data["addresses"]
   API_key = data["API_key"]
   # Distance Matrix API only accepts 100 elements per request, so get rows in multiple requests.
@@ -21,14 +21,14 @@ def create_time_matrix(data, traffic = False):
   # Send q requests, returning max_rows rows per request.
   for i in range(q):
     origin_addresses = addresses[i * max_rows: (i + 1) * max_rows]
-    response = send_request(origin_addresses, dest_addresses, traffic, API_key)
+    response = send_request(origin_addresses, dest_addresses, traffic, departure_time, API_key)
     # print(response)
     time_matrix += build_time_matrix(response, traffic)
 
   # Get the remaining remaining r rows, if necessary.
   if r > 0:
     origin_addresses = addresses[q * max_rows: q * max_rows + r]
-    response = send_request(origin_addresses, dest_addresses, traffic, API_key)
+    response = send_request(origin_addresses, dest_addresses, traffic, departure_time, API_key)
     # print(response)
     time_matrix += build_time_matrix(response, traffic)
 
@@ -61,7 +61,7 @@ def create_distance_matrix(data):
   return distance_matrix
 
 
-def send_request(origin_addresses, dest_addresses, traffic, API_key):
+def send_request(origin_addresses, dest_addresses, traffic, departure_time, API_key):
   """ Build and send request for the given origin and destination addresses."""
   def build_address_str(addresses):
     # Build a pipe-separated string of addresses
@@ -74,14 +74,13 @@ def send_request(origin_addresses, dest_addresses, traffic, API_key):
   request = 'https://maps.googleapis.com/maps/api/distancematrix/json?units=imperial'
   origin_address_str = build_address_str(origin_addresses)
   dest_address_str = build_address_str(dest_addresses)
-  departure_time = 'now'
   request = request + '&origins=' + origin_address_str + '&destinations=' + dest_address_str + '&key=' + API_key
   if traffic:
     request = request + '&departure_time=' + departure_time
-  print('Request:\n'+str(request)+'\n')
+  # print('Request:\n'+str(request)+'\n')
   jsonResult = urllib.request.urlopen(request).read()
   response = json.loads(jsonResult)
-  print('Response:\n'+str(response)+'\n')
+  # print('Response:\n'+str(response)+'\n')
   return response
 
 

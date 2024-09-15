@@ -57,6 +57,7 @@ def create_data_model(drivers_df, workers_df, vehicle_capacity, timezone=None):
     # print(str(start_of_day))
     # print(str(end_of_day))
     data['addresses'] = []
+    data['address_names'] = dict()
     address_dict = {} # maps index in data['addresses'] to full name of address
     address_rpt = [] # addresses with home and destinations repeated for the solver
     data['num_vehicles'] = drivers_df.shape[0]
@@ -77,10 +78,14 @@ def create_data_model(drivers_df, workers_df, vehicle_capacity, timezone=None):
         home_address = format_address(row['Home'])
         data['demands'].append(1)
         data['time_windows'].append((start_of_day, end_of_day))
+        row['Home Coordinates (Optional)'] = str(row['Home Coordinates (Optional)'])
+        if row['Home Coordinates (Optional)'] != 'nan': # check if the coordinates cell isn't empty
+            home_coor = format_address(row['Home Coordinates (Optional)'])
+            data['address_names'][home_coor] = home_address
+            home_address = home_coor
         if home_address not in address_dict:
             data['addresses'].append(home_address)
             address_dict[home_address] = len(data['addresses']) - 1
-        address_rpt.append(address_dict[home_address])
 
         # Work
         data['worker_name'].append(row['Name'])
@@ -91,10 +96,17 @@ def create_data_model(drivers_df, workers_df, vehicle_capacity, timezone=None):
         dest_time_sec = time_to_epoch_time(f'{dest_time.hour}:{dest_time.minute}:00', timezone)
         data['time_windows'].append((dest_time_sec-300, dest_time_sec))
         data['demands'].append(-1)
+        row['Destination Coordinates (Optional)'] = str(row['Destination Coordinates (Optional)'])
+        if row['Destination Coordinates (Optional)'] != 'nan': # check if the coordinates cell isn't empty
+            dest_coor = format_address(row['Destination Coordinates (Optional)'])
+            data['address_names'][dest_coor] = dest_address
+            dest_address = dest_coor
         if dest_address not in address_dict:
             data['addresses'].append(dest_address)
             address_dict[dest_address] = len(data['addresses']) - 1
-        address_rpt.append(address_dict[dest_address])
+
+        address_rpt.append([dest_time.hour - 1, address_dict[home_address]])
+        address_rpt.append([dest_time.hour, address_dict[dest_address]])
 
         data["pickups_deliveries"].append([index, index + 1])
 
@@ -107,7 +119,6 @@ def create_data_model(drivers_df, workers_df, vehicle_capacity, timezone=None):
         # leave_time_sec = leave_time.hour * 3600 + leave_time.minute * 60 # + leave_time.second
         leave_time_sec = time_to_epoch_time(f'{leave_time.hour}:{leave_time.minute}:00', timezone)
         data['time_windows'].append((leave_time_sec, leave_time_sec + 300))
-        address_rpt.append(address_dict[dest_address])
 
         # Home
         data['worker_name'].append(row['Name'])
@@ -115,7 +126,9 @@ def create_data_model(drivers_df, workers_df, vehicle_capacity, timezone=None):
         dest_time = row['Arrival Time']
         data['time_windows'].append((start_of_day, end_of_day))
         data['demands'].append(-1)
-        address_rpt.append(address_dict[home_address])
+
+        address_rpt.append([leave_time.hour, address_dict[dest_address]])
+        address_rpt.append([leave_time.hour + 1, address_dict[home_address]])
 
         data["pickups_deliveries"].append([index + 2, index + 3])
         index += 4 
@@ -125,45 +138,33 @@ def create_data_model(drivers_df, workers_df, vehicle_capacity, timezone=None):
 
     # Build time matrix from unique addresses
     data['API_key'] = api.get_api_key()
-    time_matrix = matrix.create_time_matrix(data, traffic = True)
-    # time_matrix = [[   0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
-    #        0,    0],
-    #    [   0,    0, 1633, 1633,    0, 1552, 1633, 1633, 1552, 1552, 1633,
-    #     1633, 1552],
-    #    [   0, 1723,   15,   15, 1723,  909,   15,   15,  909,  300,   15,
-    #       15,  300],
-    #    [   0, 1723,   15,   15, 1723,  909,   15,   15,  909,  300,   15,
-    #       15,  300],
-    #    [   0,    0, 1633, 1633,    0, 1552, 1633, 1633, 1552, 1552, 1633,
-    #     1633, 1552],
-    #    [   0, 1773, 1026, 1026, 1773,   10, 1026, 1026,   10, 1152, 1026,
-    #     1026, 1152],
-    #    [   0, 1723,   15,   15, 1723,  909,   15,   15,  909,  300,   15,
-    #       15,  300],
-    #    [   0, 1723,   15,   15, 1723,  909,   15,   15,  909,  300,   15,
-    #       15,  300],
-    #    [   0, 1773, 1026, 1026, 1773,   10, 1026, 1026,   10, 1152, 1026,
-    #     1026, 1152],
-    #    [   0, 1685,  184,  184, 1685, 1065,  184,  184, 1065,    0,  184,
-    #      184,    0],
-    #    [   0, 1723,   15,   15, 1723,  909,   15,   15,  909,  300,   15,
-    #       15,  300],
-    #    [   0, 1723,   15,   15, 1723,  909,   15,   15,  909,  300,   15,
-    #       15,  300],
-    #    [   0, 1685,  184,  184, 1685, 1065,  184,  184, 1065,    0,  184,
-    #      184,    0]]
+    # time_matrix = matrix.create_time_matrix(data, traffic = True, departure_time=str(time_to_epoch_time('7:30:00')))
+
+    # Build time matrix for every hour of the next day
+    time_matrices = []
+    for hour in range(24):
+        hour_str = f'{str(hour)}:00:00'
+        time_matrices.append(matrix.create_time_matrix(data, traffic = True, departure_time=str(time_to_epoch_time(hour_str))))
+
+    print()
+    for index, tm in enumerate(time_matrices):
+        print(index)
+        print(tm)
+        print()
+
+    # Assemble time matrix for the solver
 
     array = np.zeros((len(address_rpt) + 1, len(address_rpt) + 1), dtype = int)
 
     for i in range(array.shape[0]):
         for j in range(array.shape[1]):
             if i!=0 and j!=0:
-                array[i, j] = time_matrix[address_rpt[i-1]][address_rpt[j-1]]
+                array[i, j] = time_matrices[address_rpt[i-1][0]][address_rpt[i-1][1]][address_rpt[j-1][1]]
 
     data['time_matrix'] = array
     
     # print(address_dict)
-    # print(address_rpt)
+    print(address_rpt)
 
     return data
 
@@ -488,8 +489,18 @@ def create_schedule(data, manager, routing, solution, output_file, timezone):
             row = []
             if data['node_type'][ind] == 'from_1' or data['node_type'][ind] == 'from_2':
                 name = data['worker_name'][ind]
-                home_address = urllib.parse.unquote(data['addresses'][data['address_rpt'][ind]])#[:-len(', Kuwait')]
-                dest_address = urllib.parse.unquote(data['addresses'][data['address_rpt'][ind + 1]])#[:-len(', Kuwait')]
+                home = data['addresses'][data['address_rpt'][ind][1]]
+                if home in data['address_names']:
+                    home = data['address_names'][home]
+                dest = data['addresses'][data['address_rpt'][ind + 1][1]]
+                if dest in data['address_names']:
+                    dest = data['address_names'][dest]                
+                home_address = urllib.parse.unquote(home)
+                if home_address.endswith(', Kuwait'):
+                    home_address = home_address[:-len(', Kuwait')]
+                dest_address = urllib.parse.unquote(dest)
+                if dest_address.endswith(', Kuwait'):
+                    dest_address = dest_address[:-len(', Kuwait')]
                 if data['node_type'][ind] == 'from_1':
                     # Pickup time range:
                     # pickup_time = f'{convert_seconds_to_hhmm(solution.Min(time_var))} to {convert_seconds_to_hhmm(solution.Max(time_var))}'
@@ -507,7 +518,7 @@ def create_schedule(data, manager, routing, solution, output_file, timezone):
                         pickup_time, 
                         arrival_time]
                 ws.append(row)
-                print(row, '[', data['address_rpt'][ind], 'to', data['address_rpt'][ind + 1], ']')
+                print(row, '[', data['address_rpt'][ind][1], 'to', data['address_rpt'][ind + 1][1], ']')
                 row_count += 1
         ws.append([])
         row_count += 1
@@ -536,12 +547,12 @@ def main():
     # drivers_df = pd.read_excel('Drivers.xlsx')
     workers_df = pd.read_excel('Test_Workers.xlsx')
     # workers_df = pd.read_excel('Workers_Test.xlsx')
-    output_file = 'Schedule.xlsx'
+    output_file = 'Schedule1.xlsx'
     vehicle_capacity = 3
     timezone = 'Asia/Kuwait'
     data = create_data_model(drivers_df, workers_df, vehicle_capacity, timezone)
     print(data)
-    # print_2d_matrix(data['time_matrix'])
+    print_2d_matrix(data['time_matrix'])
     solve(data, same_driver=False, output_file=output_file)
 
 if __name__ == "__main__":
